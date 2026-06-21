@@ -12,7 +12,6 @@ package treeset
 import (
 	"cmp"
 	"fmt"
-	"reflect"
 	"strings"
 
 	"github.com/emirpasic/gods/v2/sets"
@@ -100,6 +99,49 @@ func (set *Set[T]) String() string {
 	return str
 }
 
+func comparatorsSemanticallyEqual[T comparable](
+	cmp1, cmp2 utils.Comparator[T],
+	setValues, anotherValues []T,
+) bool {
+	totalLen := len(setValues) + len(anotherValues)
+	if totalLen == 0 {
+		return true
+	}
+
+	seen := make(map[T]struct{}, totalLen)
+	elements := make([]T, 0, totalLen)
+
+	for _, v := range setValues {
+		if _, ok := seen[v]; !ok {
+			seen[v] = struct{}{}
+			elements = append(elements, v)
+		}
+	}
+	for _, v := range anotherValues {
+		if _, ok := seen[v]; !ok {
+			seen[v] = struct{}{}
+			elements = append(elements, v)
+		}
+	}
+
+	n := len(elements)
+	if n < 2 {
+		return true
+	}
+
+	for i := 0; i < n; i++ {
+		vi := elements[i]
+		for j := 0; j < n; j++ {
+			vj := elements[j]
+			if cmp1(vi, vj) != cmp2(vi, vj) {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
 // Intersection returns the intersection between two sets.
 // The new set consists of all elements that are both in "set" and "another".
 // The two sets should have the same comparators, otherwise the result is empty set.
@@ -107,9 +149,9 @@ func (set *Set[T]) String() string {
 func (set *Set[T]) Intersection(another *Set[T]) *Set[T] {
 	result := NewWith(set.tree.Comparator)
 
-	setComparator := reflect.ValueOf(set.tree.Comparator)
-	anotherComparator := reflect.ValueOf(another.tree.Comparator)
-	if setComparator.Pointer() != anotherComparator.Pointer() {
+	setValues := set.Values()
+	anotherValues := another.Values()
+	if !comparatorsSemanticallyEqual(set.tree.Comparator, another.tree.Comparator, setValues, anotherValues) {
 		return result
 	}
 
@@ -138,9 +180,9 @@ func (set *Set[T]) Intersection(another *Set[T]) *Set[T] {
 func (set *Set[T]) Union(another *Set[T]) *Set[T] {
 	result := NewWith(set.tree.Comparator)
 
-	setComparator := reflect.ValueOf(set.tree.Comparator)
-	anotherComparator := reflect.ValueOf(another.tree.Comparator)
-	if setComparator.Pointer() != anotherComparator.Pointer() {
+	setValues := set.Values()
+	anotherValues := another.Values()
+	if !comparatorsSemanticallyEqual(set.tree.Comparator, another.tree.Comparator, setValues, anotherValues) {
 		return result
 	}
 
@@ -161,9 +203,9 @@ func (set *Set[T]) Union(another *Set[T]) *Set[T] {
 func (set *Set[T]) Difference(another *Set[T]) *Set[T] {
 	result := NewWith(set.tree.Comparator)
 
-	setComparator := reflect.ValueOf(set.tree.Comparator)
-	anotherComparator := reflect.ValueOf(another.tree.Comparator)
-	if setComparator.Pointer() != anotherComparator.Pointer() {
+	setValues := set.Values()
+	anotherValues := another.Values()
+	if !comparatorsSemanticallyEqual(set.tree.Comparator, another.tree.Comparator, setValues, anotherValues) {
 		return result
 	}
 

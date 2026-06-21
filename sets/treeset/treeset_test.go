@@ -705,3 +705,345 @@ func BenchmarkTreeSetRemove100000(b *testing.B) {
 	b.StartTimer()
 	benchmarkRemove(b, set, size)
 }
+
+func newIntComparatorWithMultiplier(multiplier int) func(a, b int) int {
+	return func(a, b int) int {
+		return (a - b) * multiplier
+	}
+}
+
+func TestSetIntersectionClosureDifferentMultiplier(t *testing.T) {
+	set := NewWith(newIntComparatorWithMultiplier(1))
+	another := NewWith(newIntComparatorWithMultiplier(2))
+	set.Add(1, 2, 3, 4)
+	another.Add(3, 4, 5, 6)
+
+	intersection := set.Intersection(another)
+	if actualValue := intersection.Size(); actualValue != 0 {
+		t.Errorf("Got %v expected %v", actualValue, 0)
+	}
+}
+
+func TestSetUnionClosureDifferentMultiplier(t *testing.T) {
+	set := NewWith(newIntComparatorWithMultiplier(1))
+	another := NewWith(newIntComparatorWithMultiplier(2))
+	set.Add(1, 2, 3, 4)
+	another.Add(3, 4, 5, 6)
+
+	union := set.Union(another)
+	if actualValue := union.Size(); actualValue != 0 {
+		t.Errorf("Got %v expected %v", actualValue, 0)
+	}
+}
+
+func TestSetDifferenceClosureDifferentMultiplier(t *testing.T) {
+	set := NewWith(newIntComparatorWithMultiplier(1))
+	another := NewWith(newIntComparatorWithMultiplier(2))
+	set.Add(1, 2, 3, 4)
+	another.Add(3, 4, 5, 6)
+
+	difference := set.Difference(another)
+	if actualValue := difference.Size(); actualValue != 0 {
+		t.Errorf("Got %v expected %v", actualValue, 0)
+	}
+}
+
+func TestSetIntersectionClosureSameMultiplier(t *testing.T) {
+	set := NewWith(newIntComparatorWithMultiplier(2))
+	another := NewWith(newIntComparatorWithMultiplier(2))
+	set.Add(1, 2, 3, 4)
+	another.Add(3, 4, 5, 6)
+
+	intersection := set.Intersection(another)
+	if actualValue := intersection.Size(); actualValue != 2 {
+		t.Errorf("Got %v expected %v", actualValue, 2)
+	}
+	if actualValue := intersection.Contains(3, 4); actualValue != true {
+		t.Errorf("Got %v expected %v", actualValue, true)
+	}
+}
+
+func TestSetIntersectionReversedComparator(t *testing.T) {
+	normalCmp := func(a, b int) int {
+		return a - b
+	}
+	reversedCmp := func(a, b int) int {
+		return b - a
+	}
+
+	set := NewWith(normalCmp)
+	another := NewWith(reversedCmp)
+	set.Add(1, 2, 3, 4)
+	another.Add(3, 4, 5, 6)
+
+	intersection := set.Intersection(another)
+	if actualValue := intersection.Size(); actualValue != 0 {
+		t.Errorf("Got %v expected %v (reversed comparator should yield empty set)", actualValue, 0)
+	}
+}
+
+func TestSetUnionReversedComparator(t *testing.T) {
+	normalCmp := func(a, b int) int {
+		return a - b
+	}
+	reversedCmp := func(a, b int) int {
+		return b - a
+	}
+
+	set := NewWith(normalCmp)
+	another := NewWith(reversedCmp)
+	set.Add(1, 2, 3)
+	another.Add(4, 5, 6)
+
+	union := set.Union(another)
+	if actualValue := union.Size(); actualValue != 0 {
+		t.Errorf("Got %v expected %v (reversed comparator should yield empty set)", actualValue, 0)
+	}
+}
+
+type person struct {
+	name string
+	age  int
+}
+
+func newPersonComparator(field string) func(a, b person) int {
+	return func(a, b person) int {
+		switch field {
+		case "name":
+			if a.name < b.name {
+				return -1
+			}
+			if a.name > b.name {
+				return 1
+			}
+			return 0
+		case "age":
+			return a.age - b.age
+		default:
+			return 0
+		}
+	}
+}
+
+func TestSetIntersectionStructDifferentField(t *testing.T) {
+	set := NewWith(newPersonComparator("name"))
+	another := NewWith(newPersonComparator("age"))
+	set.Add(person{"alice", 30}, person{"bob", 25}, person{"carol", 35})
+	another.Add(person{"dave", 25}, person{"eve", 30}, person{"frank", 35})
+
+	intersection := set.Intersection(another)
+	if actualValue := intersection.Size(); actualValue != 0 {
+		t.Errorf("Got %v expected %v (different field comparators should yield empty set)", actualValue, 0)
+	}
+}
+
+func TestSetIntersectionStructSameField(t *testing.T) {
+	set := NewWith(newPersonComparator("age"))
+	another := NewWith(newPersonComparator("age"))
+	set.Add(person{"alice", 30}, person{"bob", 25})
+	another.Add(person{"carol", 30}, person{"dave", 28})
+
+	intersection := set.Intersection(another)
+	if actualValue := intersection.Size(); actualValue != 1 {
+		t.Errorf("Got %v expected %v", actualValue, 1)
+	}
+}
+
+func TestSetFloat64SpecialValues(t *testing.T) {
+	set := New[float64]()
+	another := New[float64]()
+
+	zero := 0.0
+	nan := zero / zero
+	posZero := 0.0
+	negZero := -0.0
+
+	set.Add(nan, posZero, negZero, 1.0, 2.0)
+	another.Add(nan, posZero, negZero, 2.0, 3.0)
+
+	intersection := set.Intersection(another)
+	if intersection.Size() == 0 {
+		t.Errorf("Intersection should not be empty for same comparator")
+	}
+
+	union := set.Union(another)
+	if union.Size() == 0 {
+		t.Errorf("Union should not be empty for same comparator")
+	}
+
+	difference := set.Difference(another)
+	if difference.Size() == 0 {
+		t.Errorf("Difference should not be empty for same comparator")
+	}
+}
+
+func TestSetChainedOperations(t *testing.T) {
+	a := New[int]()
+	b := New[int]()
+	c := New[int]()
+	d := New[int]()
+
+	a.Add(1, 2, 3, 4, 5)
+	b.Add(4, 5, 6, 7, 8)
+	c.Add(3, 4, 5, 9, 10)
+	d.Add(5, 11, 12)
+
+	result := a.Intersection(b).Union(c).Intersection(d)
+	if actualValue := result.Size(); actualValue != 1 {
+		t.Errorf("Got %v expected %v", actualValue, 1)
+	}
+	if actualValue := result.Contains(5); actualValue != true {
+		t.Errorf("Got %v expected %v", actualValue, true)
+	}
+}
+
+func TestSetResultOperations(t *testing.T) {
+	set := New[string]()
+	another := New[string]()
+	set.Add("a", "b", "c")
+	another.Add("b", "c", "d")
+
+	result := set.Intersection(another)
+
+	if actualValue := result.Contains("b"); actualValue != true {
+		t.Errorf("Contains got %v expected %v", actualValue, true)
+	}
+
+	values := result.Values()
+	if len(values) != 2 {
+		t.Errorf("Values got %v expected %v", len(values), 2)
+	}
+
+	count := 0
+	result.Each(func(index int, value string) {
+		count++
+	})
+	if count != 2 {
+		t.Errorf("Each got %v expected %v", count, 2)
+	}
+
+	str := result.String()
+	if !strings.Contains(str, "TreeSet") {
+		t.Errorf("String should contain TreeSet")
+	}
+
+	jsonBytes, err := result.ToJSON()
+	if err != nil {
+		t.Errorf("ToJSON error: %v", err)
+	}
+	if len(jsonBytes) == 0 {
+		t.Errorf("ToJSON should return non-empty bytes")
+	}
+
+	it := result.Iterator()
+	iterCount := 0
+	for it.Next() {
+		iterCount++
+	}
+	if iterCount != 2 {
+		t.Errorf("Iterator got %v expected %v", iterCount, 2)
+	}
+}
+
+func TestSetEmptySetOperations(t *testing.T) {
+	set := New[int]()
+	another := New[int]()
+	another.Add(1, 2, 3)
+
+	intersection := set.Intersection(another)
+	if actualValue := intersection.Size(); actualValue != 0 {
+		t.Errorf("Intersection got %v expected %v", actualValue, 0)
+	}
+
+	union := set.Union(another)
+	if actualValue := union.Size(); actualValue != 3 {
+		t.Errorf("Union got %v expected %v", actualValue, 3)
+	}
+
+	difference := set.Difference(another)
+	if actualValue := difference.Size(); actualValue != 0 {
+		t.Errorf("Difference got %v expected %v", actualValue, 0)
+	}
+}
+
+func TestSetIntersectionSameCmpBuiltin(t *testing.T) {
+	set := New[int]()
+	another := New[int]()
+	set.Add(1, 2, 3)
+	another.Add(2, 3, 4)
+
+	intersection := set.Intersection(another)
+	if actualValue := intersection.Size(); actualValue != 2 {
+		t.Errorf("Got %v expected %v", actualValue, 2)
+	}
+	if actualValue := intersection.Contains(2, 3); actualValue != true {
+		t.Errorf("Got %v expected %v", actualValue, true)
+	}
+}
+
+func TestSetLargeSetIntersection(t *testing.T) {
+	size := 10000
+	set := New[int]()
+	another := New[int]()
+
+	for i := 0; i < size; i++ {
+		set.Add(i)
+	}
+	for i := size / 2; i < size+size/2; i++ {
+		another.Add(i)
+	}
+
+	intersection := set.Intersection(another)
+	expected := size / 2
+	if actualValue := intersection.Size(); actualValue != expected {
+		t.Errorf("Got %v expected %v", actualValue, expected)
+	}
+}
+
+func BenchmarkSetIntersection10000(b *testing.B) {
+	size := 10000
+	set := New[int]()
+	another := New[int]()
+	for i := 0; i < size; i++ {
+		set.Add(i)
+	}
+	for i := size / 2; i < size+size/2; i++ {
+		another.Add(i)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		set.Intersection(another)
+	}
+}
+
+func BenchmarkSetUnion10000(b *testing.B) {
+	size := 10000
+	set := New[int]()
+	another := New[int]()
+	for i := 0; i < size; i++ {
+		set.Add(i)
+	}
+	for i := size / 2; i < size+size/2; i++ {
+		another.Add(i)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		set.Union(another)
+	}
+}
+
+func BenchmarkSetDifference10000(b *testing.B) {
+	size := 10000
+	set := New[int]()
+	another := New[int]()
+	for i := 0; i < size; i++ {
+		set.Add(i)
+	}
+	for i := size / 2; i < size+size/2; i++ {
+		another.Add(i)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		set.Difference(another)
+	}
+}
