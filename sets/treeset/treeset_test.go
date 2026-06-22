@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/emirpasic/gods/v2/testutils"
 )
@@ -719,8 +720,11 @@ func TestSetIntersectionClosureDifferentMultiplier(t *testing.T) {
 	another.Add(3, 4, 5, 6)
 
 	intersection := set.Intersection(another)
-	if actualValue := intersection.Size(); actualValue != 0 {
-		t.Errorf("Got %v expected %v", actualValue, 0)
+	if actualValue := intersection.Size(); actualValue != 2 {
+		t.Errorf("Got %v expected %v (same-order multipliers should be semantically equal)", actualValue, 2)
+	}
+	if actualValue := intersection.Contains(3, 4); actualValue != true {
+		t.Errorf("Got %v expected %v", actualValue, true)
 	}
 }
 
@@ -731,8 +735,8 @@ func TestSetUnionClosureDifferentMultiplier(t *testing.T) {
 	another.Add(3, 4, 5, 6)
 
 	union := set.Union(another)
-	if actualValue := union.Size(); actualValue != 0 {
-		t.Errorf("Got %v expected %v", actualValue, 0)
+	if actualValue := union.Size(); actualValue != 6 {
+		t.Errorf("Got %v expected %v (same-order multipliers should be semantically equal)", actualValue, 6)
 	}
 }
 
@@ -743,8 +747,11 @@ func TestSetDifferenceClosureDifferentMultiplier(t *testing.T) {
 	another.Add(3, 4, 5, 6)
 
 	difference := set.Difference(another)
-	if actualValue := difference.Size(); actualValue != 0 {
-		t.Errorf("Got %v expected %v", actualValue, 0)
+	if actualValue := difference.Size(); actualValue != 2 {
+		t.Errorf("Got %v expected %v (same-order multipliers should be semantically equal)", actualValue, 2)
+	}
+	if actualValue := difference.Contains(1, 2); actualValue != true {
+		t.Errorf("Got %v expected %v", actualValue, true)
 	}
 }
 
@@ -1045,5 +1052,91 @@ func BenchmarkSetDifference10000(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		set.Difference(another)
+	}
+}
+
+type record struct {
+	ID   int
+	Name string
+}
+
+func newRecordSubComparator() func(a, b record) int {
+	return func(a, b record) int {
+		return a.ID - b.ID
+	}
+}
+
+func newRecordSignComparator() func(a, b record) int {
+	return func(a, b record) int {
+		if a.ID < b.ID {
+			return -1
+		}
+		if a.ID > b.ID {
+			return 1
+		}
+		return 0
+	}
+}
+
+func TestSetStructSubVsSignComparatorIntersection(t *testing.T) {
+	set := NewWith(newRecordSubComparator())
+	another := NewWith(newRecordSignComparator())
+
+	set.Add(record{1, "a"}, record{2, "b"}, record{3, "c"})
+	another.Add(record{2, "x"}, record{3, "y"}, record{4, "z"})
+
+	intersection := set.Intersection(another)
+	if actualValue := intersection.Size(); actualValue != 2 {
+		t.Errorf("Got %v expected %v", actualValue, 2)
+	}
+}
+
+func TestSetStructSubVsSignComparatorUnion(t *testing.T) {
+	set := NewWith(newRecordSubComparator())
+	another := NewWith(newRecordSignComparator())
+
+	set.Add(record{1, "a"}, record{2, "b"})
+	another.Add(record{3, "c"}, record{4, "d"})
+
+	union := set.Union(another)
+	if actualValue := union.Size(); actualValue != 4 {
+		t.Errorf("Got %v expected %v", actualValue, 4)
+	}
+}
+
+func TestSetStructSubVsSignComparatorDifference(t *testing.T) {
+	set := NewWith(newRecordSubComparator())
+	another := NewWith(newRecordSignComparator())
+
+	set.Add(record{1, "a"}, record{2, "b"}, record{3, "c"})
+	another.Add(record{2, "x"}, record{3, "y"})
+
+	difference := set.Difference(another)
+	if actualValue := difference.Size(); actualValue != 1 {
+		t.Errorf("Got %v expected %v", actualValue, 1)
+	}
+}
+
+func TestSetLargeSetThreeOpsWithinOneSecond(t *testing.T) {
+	size := 10000
+	set := New[int]()
+	another := New[int]()
+
+	for i := 0; i < size; i++ {
+		set.Add(i)
+	}
+	for i := size/2; i < size+size/2; i++ {
+		another.Add(i)
+	}
+
+	start := time.Now()
+
+	_ = set.Intersection(another)
+	_ = set.Union(another)
+	_ = set.Difference(another)
+
+	elapsed := time.Since(start)
+	if elapsed > time.Second {
+		t.Errorf("Three ops took %v, expected <= 1s", elapsed)
 	}
 }

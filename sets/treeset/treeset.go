@@ -12,6 +12,9 @@ package treeset
 import (
 	"cmp"
 	"fmt"
+	"math"
+	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/emirpasic/gods/v2/sets"
@@ -99,6 +102,25 @@ func (set *Set[T]) String() string {
 	return str
 }
 
+func cmpSign(x int) int {
+	if x < 0 {
+		return -1
+	}
+	if x > 0 {
+		return 1
+	}
+	return 0
+}
+
+func isFloatNaN[T comparable](v T) bool {
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Float32, reflect.Float64:
+		return math.IsNaN(rv.Float())
+	}
+	return false
+}
+
 func comparatorsSemanticallyEqual[T comparable](
 	cmp1, cmp2 utils.Comparator[T],
 	setValues, anotherValues []T,
@@ -129,13 +151,48 @@ func comparatorsSemanticallyEqual[T comparable](
 		return true
 	}
 
-	for i := 0; i < n; i++ {
-		vi := elements[i]
-		for j := 0; j < n; j++ {
-			vj := elements[j]
-			if cmp1(vi, vj) != cmp2(vi, vj) {
+	floatKind := reflect.Invalid
+	rv := reflect.ValueOf(elements[0])
+	switch rv.Kind() {
+	case reflect.Float32, reflect.Float64:
+		floatKind = rv.Kind()
+	}
+
+	if floatKind != reflect.Invalid {
+		hasNaN := false
+		for _, v := range elements {
+			if isFloatNaN(v) {
+				hasNaN = true
+				break
+			}
+		}
+		if hasNaN {
+			var nanElem T
+			for _, v := range elements {
+				if isFloatNaN(v) {
+					nanElem = v
+					break
+				}
+			}
+			cmp1NaNCollapse := (cmp1(nanElem, nanElem) == 0)
+			cmp2NaNCollapse := (cmp2(nanElem, nanElem) == 0)
+			if cmp1NaNCollapse != cmp2NaNCollapse {
 				return false
 			}
+		}
+	}
+
+	sorted := make([]T, n)
+	copy(sorted, elements)
+	sort.Slice(sorted, func(i, j int) bool {
+		return cmp1(sorted[i], sorted[j]) < 0
+	})
+
+	for i := 0; i < n-1; i++ {
+		r1 := cmp1(sorted[i], sorted[i+1])
+		r2 := cmp2(sorted[i], sorted[i+1])
+		if cmpSign(r1) != cmpSign(r2) {
+			return false
 		}
 	}
 
