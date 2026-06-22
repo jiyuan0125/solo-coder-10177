@@ -112,15 +112,6 @@ func cmpSign(x int) int {
 	return 0
 }
 
-func isFloatNaN[T comparable](v T) bool {
-	rv := reflect.ValueOf(v)
-	switch rv.Kind() {
-	case reflect.Float32, reflect.Float64:
-		return math.IsNaN(rv.Float())
-	}
-	return false
-}
-
 func comparatorsSemanticallyEqual[T comparable](
 	cmp1, cmp2 utils.Comparator[T],
 	setValues, anotherValues []T,
@@ -159,26 +150,20 @@ func comparatorsSemanticallyEqual[T comparable](
 	}
 
 	if floatKind != reflect.Invalid {
-		hasNaN := false
-		for _, v := range elements {
-			if isFloatNaN(v) {
-				hasNaN = true
-				break
-			}
+		typ := rv.Type()
+		var nanElem, nonNaNElem T
+		if floatKind == reflect.Float64 {
+			nanElem = reflect.ValueOf(math.NaN()).Convert(typ).Interface().(T)
+			nonNaNElem = reflect.ValueOf(1.0).Convert(typ).Interface().(T)
+		} else {
+			nanElem = reflect.ValueOf(float32(math.NaN())).Convert(typ).Interface().(T)
+			nonNaNElem = reflect.ValueOf(float32(1.0)).Convert(typ).Interface().(T)
 		}
-		if hasNaN {
-			var nanElem T
-			for _, v := range elements {
-				if isFloatNaN(v) {
-					nanElem = v
-					break
-				}
-			}
-			cmp1NaNCollapse := (cmp1(nanElem, nanElem) == 0)
-			cmp2NaNCollapse := (cmp2(nanElem, nanElem) == 0)
-			if cmp1NaNCollapse != cmp2NaNCollapse {
-				return false
-			}
+		if cmp1(nanElem, nonNaNElem) == 0 || cmp2(nanElem, nonNaNElem) == 0 {
+			return false
+		}
+		if cmp1(nonNaNElem, nanElem) == 0 || cmp2(nonNaNElem, nanElem) == 0 {
+			return false
 		}
 	}
 

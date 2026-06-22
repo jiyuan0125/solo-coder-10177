@@ -7,6 +7,7 @@ package treeset
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -856,9 +857,22 @@ func TestSetIntersectionStructSameField(t *testing.T) {
 	}
 }
 
+func newFloat64NaNCollapsingComparator() func(a, b float64) int {
+	return func(a, b float64) int {
+		if a < b {
+			return -1
+		}
+		if a > b {
+			return 1
+		}
+		return 0
+	}
+}
+
 func TestSetFloat64SpecialValues(t *testing.T) {
-	set := New[float64]()
-	another := New[float64]()
+	cmpFunc := newFloat64NaNCollapsingComparator()
+	set := NewWith(cmpFunc)
+	another := NewWith(cmpFunc)
 
 	zero := 0.0
 	nan := zero / zero
@@ -869,18 +883,86 @@ func TestSetFloat64SpecialValues(t *testing.T) {
 	another.Add(nan, posZero, negZero, 2.0, 3.0)
 
 	intersection := set.Intersection(another)
+	if intersection.Size() != 0 {
+		t.Errorf("Intersection with NaN-collapsing comparator should be empty, got %v", intersection.Size())
+	}
+
+	union := set.Union(another)
+	if union.Size() != 0 {
+		t.Errorf("Union with NaN-collapsing comparator should be empty, got %v", union.Size())
+	}
+
+	difference := set.Difference(another)
+	if difference.Size() != 0 {
+		t.Errorf("Difference with NaN-collapsing comparator should be empty, got %v", difference.Size())
+	}
+}
+
+func newFloat64NaNFriendlyComparator() func(a, b float64) int {
+	return func(a, b float64) int {
+		aIsNaN := math.IsNaN(a)
+		bIsNaN := math.IsNaN(b)
+		if aIsNaN && bIsNaN {
+			return 0
+		}
+		if aIsNaN {
+			return 1
+		}
+		if bIsNaN {
+			return -1
+		}
+		if a < b {
+			return -1
+		}
+		if a > b {
+			return 1
+		}
+		return 0
+	}
+}
+
+func TestSetFloat64NaNFriendlyComparator(t *testing.T) {
+	cmp := newFloat64NaNFriendlyComparator()
+	set := NewWith(cmp)
+	another := NewWith(cmp)
+
+	zero := 0.0
+	nan := zero / zero
+
+	set.Add(1.0, 0.0, nan)
+	another.Add(0.0, -0.0, nan)
+
+	intersection := set.Intersection(another)
 	if intersection.Size() == 0 {
-		t.Errorf("Intersection should not be empty for same comparator")
+		t.Errorf("Intersection with NaN-friendly comparator should not be empty")
+	}
+	hasNaN := false
+	for _, v := range intersection.Values() {
+		if math.IsNaN(v) {
+			hasNaN = true
+		}
+	}
+	if !hasNaN {
+		t.Errorf("Intersection should contain NaN")
 	}
 
 	union := set.Union(another)
 	if union.Size() == 0 {
-		t.Errorf("Union should not be empty for same comparator")
+		t.Errorf("Union with NaN-friendly comparator should not be empty")
+	}
+	hasNaN = false
+	for _, v := range union.Values() {
+		if math.IsNaN(v) {
+			hasNaN = true
+		}
+	}
+	if !hasNaN {
+		t.Errorf("Union should contain NaN")
 	}
 
 	difference := set.Difference(another)
 	if difference.Size() == 0 {
-		t.Errorf("Difference should not be empty for same comparator")
+		t.Errorf("Difference with NaN-friendly comparator should not be empty")
 	}
 }
 
