@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"unsafe"
 
 	"github.com/emirpasic/gods/v2/sets"
 	rbt "github.com/emirpasic/gods/v2/trees/redblacktree"
@@ -116,6 +117,19 @@ func comparatorsSemanticallyEqual[T comparable](
 	cmp1, cmp2 utils.Comparator[T],
 	setValues, anotherValues []T,
 ) bool {
+	code1 := reflect.ValueOf(cmp1).Pointer()
+	code2 := reflect.ValueOf(cmp2).Pointer()
+	fv1 := *(*uintptr)(unsafe.Pointer(&cmp1))
+	fv2 := *(*uintptr)(unsafe.Pointer(&cmp2))
+
+	if code1 == code2 && fv1 != fv2 {
+		return false
+	}
+
+	if fv1 == fv2 {
+		return true
+	}
+
 	totalLen := len(setValues) + len(anotherValues)
 	if totalLen == 0 {
 		return true

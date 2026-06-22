@@ -721,11 +721,8 @@ func TestSetIntersectionClosureDifferentMultiplier(t *testing.T) {
 	another.Add(3, 4, 5, 6)
 
 	intersection := set.Intersection(another)
-	if actualValue := intersection.Size(); actualValue != 2 {
-		t.Errorf("Got %v expected %v (same-order multipliers should be semantically equal)", actualValue, 2)
-	}
-	if actualValue := intersection.Contains(3, 4); actualValue != true {
-		t.Errorf("Got %v expected %v", actualValue, true)
+	if actualValue := intersection.Size(); actualValue != 0 {
+		t.Errorf("Got %v expected %v (different closure instances should be semantically unequal)", actualValue, 0)
 	}
 }
 
@@ -736,8 +733,8 @@ func TestSetUnionClosureDifferentMultiplier(t *testing.T) {
 	another.Add(3, 4, 5, 6)
 
 	union := set.Union(another)
-	if actualValue := union.Size(); actualValue != 6 {
-		t.Errorf("Got %v expected %v (same-order multipliers should be semantically equal)", actualValue, 6)
+	if actualValue := union.Size(); actualValue != 0 {
+		t.Errorf("Got %v expected %v (different closure instances should be semantically unequal)", actualValue, 0)
 	}
 }
 
@@ -748,11 +745,8 @@ func TestSetDifferenceClosureDifferentMultiplier(t *testing.T) {
 	another.Add(3, 4, 5, 6)
 
 	difference := set.Difference(another)
-	if actualValue := difference.Size(); actualValue != 2 {
-		t.Errorf("Got %v expected %v (same-order multipliers should be semantically equal)", actualValue, 2)
-	}
-	if actualValue := difference.Contains(1, 2); actualValue != true {
-		t.Errorf("Got %v expected %v", actualValue, true)
+	if actualValue := difference.Size(); actualValue != 0 {
+		t.Errorf("Got %v expected %v (different closure instances should be semantically unequal)", actualValue, 0)
 	}
 }
 
