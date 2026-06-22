@@ -1222,3 +1222,39 @@ func TestSetLargeSetThreeOpsWithinOneSecond(t *testing.T) {
 		t.Errorf("Three ops took %v, expected <= 1s", elapsed)
 	}
 }
+
+func newIntComparatorWithUnusedCapture(tag string) func(a, b int) int {
+	_ = tag
+	return func(a, b int) int {
+		return a - b
+	}
+}
+
+func TestSetBehaviorallyIdenticalClosuresWithDifferentUnusedCaptures(t *testing.T) {
+	set := NewWith(newIntComparatorWithUnusedCapture("source-A"))
+	another := NewWith(newIntComparatorWithUnusedCapture("source-B"))
+
+	set.Add(1, 2, 3)
+	another.Add(3, 4, 5)
+
+	intersection := set.Intersection(another)
+	if actualValue := intersection.Size(); actualValue != 1 {
+		t.Errorf("Intersection: got %v expected %v (behaviorally identical closures should produce real results)", actualValue, 1)
+	}
+	if actualValue := intersection.Contains(3); actualValue != true {
+		t.Errorf("Intersection should contain 3")
+	}
+
+	union := set.Union(another)
+	if actualValue := union.Size(); actualValue != 5 {
+		t.Errorf("Union: got %v expected %v (behaviorally identical closures should produce real results)", actualValue, 5)
+	}
+
+	difference := set.Difference(another)
+	if actualValue := difference.Size(); actualValue != 2 {
+		t.Errorf("Difference: got %v expected %v (behaviorally identical closures should produce real results)", actualValue, 2)
+	}
+	if actualValue := difference.Contains(1, 2); actualValue != true {
+		t.Errorf("Difference should contain 1 and 2")
+	}
+}
