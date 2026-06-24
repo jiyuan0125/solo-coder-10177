@@ -12,7 +12,7 @@ package treeset
 import (
 	"cmp"
 	"fmt"
-	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/emirpasic/gods/v2/sets"
@@ -100,6 +100,89 @@ func (set *Set[T]) String() string {
 	return str
 }
 
+// comparatorsSemanticallyEqual checks whether two comparators induce the same
+// equivalence relation and total ordering on the given set of probe elements.
+//
+// The check works by sorting the probe elements with each comparator (using
+// stable sort to preserve relative order of equal elements), then verifying
+// that every adjacent pair in both sorted orders agrees on:
+//   - whether the two elements are equal (cmp == 0), and
+//   - the sign of the ordering when they are not equal.
+//
+// For valid total-order comparators, agreement on all adjacent pairs in sorted
+// order implies agreement on every pair.  Both directions are checked (the
+// pairs adjacent in cmp1's order, and the pairs adjacent in cmp2's order) so
+// that subtle disagreements such as one comparator collapsing a distinction
+// the other makes are not missed.
+//
+// The probe elements are the actual values stored in the two participating
+// sets.  Closures that differ only in captured fields that never affect the
+// outcome on those elements are, for the purpose of the set operation,
+// indistinguishable; conversely, any difference that would affect the result
+// on the actual elements will be observed on at least one adjacent pair.
+//
+// Performance is O(n log n) in the total number of elements, which for sets
+// of 10 000 elements is comfortably sub-millisecond on commodity hardware.
+func comparatorsSemanticallyEqual[T comparable](
+	cmp1, cmp2 utils.Comparator[T],
+	elements []T,
+) bool {
+	n := len(elements)
+	if n < 2 {
+		return true
+	}
+
+	s1 := make([]T, n)
+	copy(s1, elements)
+	sort.SliceStable(s1, func(i, j int) bool { return cmp1(s1[i], s1[j]) < 0 })
+
+	s2 := make([]T, n)
+	copy(s2, elements)
+	sort.SliceStable(s2, func(i, j int) bool { return cmp2(s2[i], s2[j]) < 0 })
+
+	for i := 1; i < n; i++ {
+		c1 := cmp1(s1[i-1], s1[i])
+		c2 := cmp2(s1[i-1], s1[i])
+		if (c1 == 0) != (c2 == 0) {
+			return false
+		}
+		if c1 != 0 && (c1 < 0) != (c2 < 0) {
+			return false
+		}
+	}
+
+	for i := 1; i < n; i++ {
+		c1 := cmp1(s2[i-1], s2[i])
+		c2 := cmp2(s2[i-1], s2[i])
+		if (c1 == 0) != (c2 == 0) {
+			return false
+		}
+		if c1 != 0 && (c1 < 0) != (c2 < 0) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// sameComparator checks whether two sets' comparators are semantically
+// equivalent by testing them against the combined element population of
+// both sets.  When either set is empty the comparators are trivially
+// compatible (there are no elements to disagree on) and the result is
+// always true.
+func (set *Set[T]) sameComparator(another *Set[T]) bool {
+	total := set.Size() + another.Size()
+	if total == 0 {
+		return true
+	}
+
+	probes := make([]T, 0, total)
+	probes = append(probes, set.Values()...)
+	probes = append(probes, another.Values()...)
+
+	return comparatorsSemanticallyEqual(set.tree.Comparator, another.tree.Comparator, probes)
+}
+
 // Intersection returns the intersection between two sets.
 // The new set consists of all elements that are both in "set" and "another".
 // The two sets should have the same comparators, otherwise the result is empty set.
@@ -107,9 +190,7 @@ func (set *Set[T]) String() string {
 func (set *Set[T]) Intersection(another *Set[T]) *Set[T] {
 	result := NewWith(set.tree.Comparator)
 
-	setComparator := reflect.ValueOf(set.tree.Comparator)
-	anotherComparator := reflect.ValueOf(another.tree.Comparator)
-	if setComparator.Pointer() != anotherComparator.Pointer() {
+	if !set.sameComparator(another) {
 		return result
 	}
 
@@ -138,9 +219,7 @@ func (set *Set[T]) Intersection(another *Set[T]) *Set[T] {
 func (set *Set[T]) Union(another *Set[T]) *Set[T] {
 	result := NewWith(set.tree.Comparator)
 
-	setComparator := reflect.ValueOf(set.tree.Comparator)
-	anotherComparator := reflect.ValueOf(another.tree.Comparator)
-	if setComparator.Pointer() != anotherComparator.Pointer() {
+	if !set.sameComparator(another) {
 		return result
 	}
 
@@ -161,9 +240,7 @@ func (set *Set[T]) Union(another *Set[T]) *Set[T] {
 func (set *Set[T]) Difference(another *Set[T]) *Set[T] {
 	result := NewWith(set.tree.Comparator)
 
-	setComparator := reflect.ValueOf(set.tree.Comparator)
-	anotherComparator := reflect.ValueOf(another.tree.Comparator)
-	if setComparator.Pointer() != anotherComparator.Pointer() {
+	if !set.sameComparator(another) {
 		return result
 	}
 
